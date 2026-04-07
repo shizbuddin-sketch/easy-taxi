@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>easy Taxi</title>
+<link rel="manifest" href="manifest.json">
+<style>
+body{margin:0;font-family:Arial;background:#0b1f3a;color:white}
+.page{display:none;padding:20px}
+.active{display:block}
+.card{background:#102a4d;padding:15px;margin:10px auto;border-radius:10px;max-width:500px}
+input,select{width:100%;padding:10px;margin:6px 0;border:none;border-radius:5px}
+button{width:100%;padding:10px;background:#1f4fa3;color:white;border:none;margin-top:10px;border-radius:5px}
+.back{background:#06152b}
+.list{background:#173b6c;margin:5px 0;padding:8px;border-radius:5px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login" class="page active">
+<div class="card">
+<h2>Login</h2>
+<select id="loginType">
+<option value="user">Passenger</option>
+<option value="driver">Driver</option>
+<option value="admin">Admin</option>
+</select>
+<input id="loginName" placeholder="Username">
+<input id="loginPass" type="password" placeholder="Password">
+<button onclick="login()">Login</button>
+<button onclick="showPage('signup')">Signup</button>
+</div>
+</div>
+
+<!-- SIGNUP -->
+<div id="signup" class="page">
+<button class="back" onclick="showPage('login')">⬅ Back</button>
+<div class="card">
+<h2>Create Account</h2>
+<select id="signupType" onchange="toggleDriver()">
+<option value="user">Passenger</option>
+<option value="driver">Driver</option>
+</select>
+<input id="signupName" placeholder="Username">
+<input id="signupPass" type="password" placeholder="Password">
+<div id="driverFields" style="display:none">
+<input id="taxiNumber" placeholder="Taxi Number">
+<input id="phone" placeholder="Phone Number">
+</div>
+<button onclick="signup()">Create Account</button>
+</div>
+</div>
+
+<!-- PASSENGER -->
+<div id="passenger" class="page">
+<button class="back" onclick="logout()">⬅ Logout</button>
+<div class="card" id="bookingCard">
+<h2>Book Ride</h2>
+<select id="route" onchange="updateAvailableTaxis()">
+<option value="Salanda → Beshband">Salanda → Beshband</option>
+<option value="Beshband → Salanda">Beshband → Salanda</option>
+</select>
+<div id="availableTaxis"></div>
+<select id="bookingType" onchange="toggleBooking()">
+<option value="seat">Book Seats</option>
+<option value="full">Full Taxi</option>
+</select>
+<div id="seatFields">
+<input id="total" placeholder="Total Members">
+<input id="males" placeholder="Males">
+<input id="females" placeholder="Females">
+<input id="children" placeholder="Children">
+</div>
+<div id="fullFields" style="display:none">
+<input id="mobile" placeholder="Your Phone Number">
+</div>
+<button id="bookBtn" onclick="book()">Book</button>
+<button id="cancelBtn" style="display:none" onclick="cancelBooking()">Cancel Booking</button>
+<div id="status"></div>
+<div id="fullDriverList"></div>
+</div>
+<div class="card">
+<h3>Your Ride</h3>
+<div id="myRide"></div>
+</div>
+</div>
+
+<!-- DRIVER -->
+<div id="driver" class="page">
+<button class="back" onclick="logout()">⬅ Logout</button>
+<div class="card">
+<h2>Driver Panel</h2>
+<select id="driverStand">
+<option value="Salanda → Beshband">Salanda → Beshband</option>
+<option value="Beshband → Salanda">Beshband → Salanda</option>
+</select>
+<input id="seatPrice" placeholder="Price per seat">
+<input id="fullPrice" placeholder="Full taxi price">
+<input id="driverPhone" placeholder="Phone Number">
+<label><input type="checkbox" id="driverTurn"> It's my turn</label>
+<label><input type="checkbox" id="driverDuty"> On Duty</label>
+<button onclick="saveDriverInfo()">Save Info</button>
+</div>
+<div class="card">
+<h3>Passenger Requests</h3>
+<div id="rideRequests"></div>
+</div>
+</div>
+
+<!-- ADMIN -->
+<div id="admin" class="page">
+<button class="back" onclick="logout()">⬅ Logout</button>
+<div class="card">
+<h2>Approve / Manage Drivers</h2>
+<div id="pendingDrivers"></div>
+<div id="manageDrivers"></div>
+</div>
+</div>
+
+<script>
+let users = JSON.parse(localStorage.getItem("users")) || []
+let drivers = JSON.parse(localStorage.getItem("drivers")) || []
+let pending = JSON.parse(localStorage.getItem("pending")) || []
+let rides = JSON.parse(localStorage.getItem("rides")) || []
+let admin = {u:"admin", p:"112233"}
+let currentUser = null
+
+function save(){
+  localStorage.setItem("users",JSON.stringify(users))
+  localStorage.setItem("drivers",JSON.stringify(drivers))
+  localStorage.setItem("pending",JSON.stringify(pending))
+  localStorage.setItem("rides",JSON.stringify(rides))
+}
+
+function showPage(id){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"))
+  document.getElementById(id).classList.add("active")
+}
+
+function toggleDriver(){
+  driverFields.style.display = signupType.value==="driver" ? "block":"none"
+}
+
+function toggleBooking(){
+  seatFields.style.display = bookingType.value==="seat" ? "block":"none"
+  fullFields.style.display = bookingType.value==="full" ? "block":"none"
+}
+
+function signup(){
+  let name = signupName.value.trim(), pass = signupPass.value.trim();
+  if(!name || !pass) return alert("Fill all fields");
+  if(users.find(u=>u.name===name) || drivers.find(d=>d.name===name) || pending.find(p=>p.name===name)) return alert("Username taken");
+  if(signupType.value==="user") users.push({name, pass});
+  if(signupType.value==="driver") pending.push({name, pass, taxi:taxiNumber.value, phone:phone.value});
+  save(); showPage("login");
+}
+
+function login(){
+  if(loginType.value==="admin"){
+    if(loginName.value===admin.u && loginPass.value===admin.p){currentUser={role:"admin"}; showPage("admin"); render()}
+    else alert("Wrong admin"); return;
+  }
+  if(loginType.value==="user"){
+    let u = users.find(x=>x.name===loginName.value && x.pass===loginPass.value);
+    if(u){currentUser={role:"user",name:u.name}; showPage("passenger"); render(); checkExistingBooking()}
+    else alert("User not found");
+  }
+  if(loginType.value==="driver"){
+    let d = drivers.find(x=>x.name===loginName.value && x.pass===loginPass.value);
+    if(d){currentUser={role:"driver",name:d.name}; showPage("driver"); render()}
+    else alert("Driver not approved");
+  }
+}
+
+function logout(){currentUser=null; showPage("login")}
+
+function saveDriverInfo(){
+  let d = drivers.find(x=>x.name===currentUser.name);
+  d.stand = driverStand.value;
+  d.seatPrice = seatPrice.value;
+  d.fullPrice = fullPrice.value;
+  d.phone = driverPhone.value;
+  d.turn = driverTurn.checked;
+  d.onDuty = driverDuty.checked;
+  save(); alert("Saved"); updateAvailableTaxis(); render();
+}
+
+function updateAvailableTaxis(){
+  let selectedStand = route.value;
+  let count = drivers.filter(d=>d.stand===selectedStand && d.onDuty).length;
+  availableTaxis.innerHTML = "Available taxis: "+count;
+}
+
+function notifyDriver(booking){
+  let d = drivers.find(d=>d.stand===booking.route && d.turn && d.onDuty);
+  if(d) alert(`New booking for driver ${d.name}: Passenger ${booking.user}`);
+}
+
+function book(){
+  let selectedStand = route.value;
+  let turnDrivers = drivers.filter(d=>d.stand===selectedStand && d.turn && d.onDuty);
+  if(turnDrivers.length===0) return alert("No drivers available");
+  bookingCard.querySelectorAll('input, select, #bookBtn').forEach(el=>el.style.display='none');
+  document.getElementById('cancelBtn').style.display='block';
+
+  if(bookingType.value==="full"){
+    rides.push({user:currentUser.name, type:"Full", drivers:turnDrivers});
+    status.innerHTML="✅ Full taxi booked. Drivers info below:";
+    let driverListHTML="<h4>All Drivers for Full Taxi:</h4>";
+    turnDrivers.forEach(d=>driverListHTML+=`Name: ${d.name}, Phone: ${d.phone}, Car: ${d.taxi}<br>`);
+    document.getElementById('fullDriverList').innerHTML = driverListHTML;
+    myRide.innerHTML='';
+  } else {
+    let d = turnDrivers[0];
+    rides.push({user:currentUser.name, type:"Seat", driver:d.name, phone:d.phone, total:total.value, males:males.value, females:females.value, children:children.value, route:selectedStand});
+    status.innerHTML=`✅ Seat(s) booked with Driver: ${d.name}, Phone: ${d.phone}`;
+    myRide.innerHTML=`Driver: ${d.name}, Phone: ${d.phone}, Members: ${total.value}`;
+    notifyDriver(rides[rides.length-1]);
+  }
+  save(); updateAvailableTaxis(); render();
+}
+
+function cancelBooking(){
+  rides = rides.filter(r=>r.user!==currentUser.name);
+  save();
+  bookingCard.querySelectorAll('input, select, #bookBtn').forEach(el=>el.style.display='block');
+  document.getElementById('cancelBtn').style.display='none';
+  document.getElementById('fullDriverList').innerHTML='';
+  status.innerHTML=''; myRide.innerHTML='';
+  updateAvailableTaxis();
+}
+
+function approve(i){drivers.push(pending[i]); pending.splice(i,1); save(); render(); updateAvailableTaxis();}
+
+function deleteDriver(i){drivers.splice(i,1); save(); render(); updateAvailableTaxis();}
+
+function editDriver(i){
+  let d = drivers[i];
+  let newPhone = prompt("Enter new phone number:", d.phone);
+  let newPass = prompt("Enter new password:", d.pass);
+  if(newPhone) d.phone = newPhone;
+  if(newPass) d.pass = newPass;
+  save(); render();
+}
+
+function render(){
+  if(currentUser?.role==="driver"){
+    let d = drivers.find(x=>x.name===currentUser.name);
+    rideRequests.innerHTML="";
+    rides.forEach(r=>{
+      if(r.type==="Seat" && r.driver===d.name){
+        rideRequests.innerHTML+=`<div class='list'>Passenger: ${r.user}<br>Phone: ${r.phone}<br>Members: ${r.total}</div>`;
+      }
+    });
+  }
+  pendingDrivers.innerHTML="";
+  pending.forEach((d,i)=>{
+    pendingDrivers.innerHTML+=`<div class='list'>${d.name} - ${d.taxi} <button onclick='approve(${i})'>Approve</button></div>`;
+  });
+  manageDrivers.innerHTML="";
+  drivers.forEach((d,i)=>{
+    manageDrivers.innerHTML+=`<div class='list'>${d.name} - ${d.taxi} <br> Phone: ${d.phone} <button onclick='editDriver(${i})'>Edit</button> <button onclick='deleteDriver(${i})'>Delete</button></div>`;
+  });
+  updateAvailableTaxis();
+}
+
+function checkExistingBooking(){
+  let my = rides.find(r=>r.user===currentUser?.name);
+  if(my){
+    bookingCard.querySelectorAll('input, select, #bookBtn').forEach(el=>el.style.display='none');
+    document.getElementById('cancelBtn').style.display='block';
+    if(my.type==='Full'){
+      let driverListHTML="<h4>All Drivers for Full Taxi:</h4>";
+      my.drivers.forEach(d=>driverListHTML+=`Name: ${d.name}, Phone: ${d.phone}, Car: ${d.taxi}<br>`);
+      document.getElementById('fullDriverList').innerHTML = driverListHTML;
+      myRide.innerHTML='';
+    } else {
+      let d = drivers.find(dr=>dr.name===my.driver);
+      myRide.innerHTML=`Driver: ${d.name}, Phone: ${d.phone}, Members: ${my.total}`;
+    }
+    status.innerHTML='✅ Booking exists';
+  }
+}
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js')
+    .then(() => console.log('Service Worker Registered'))
+    .catch(err => console.log('Service Worker Failed', err));
+  }
+</script>
+</body>
+</html>
